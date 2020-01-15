@@ -1,0 +1,6 @@
+logs/
+vendor/
+error_log
+
+# Credentials an' secrets
+.env
