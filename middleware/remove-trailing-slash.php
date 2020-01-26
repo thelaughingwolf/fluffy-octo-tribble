@@ -5,7 +5,7 @@ use Psr\Http\Server\RequestHandlerInterface as RequestHandler;
 use Slim\Psr7\Response;
 
 // Parse JSON Requests
-$GLOBALS['app']->router->add(  function (  Request $req, RequestHandler $handler  ) {
+$GLOBALS['app']->middleware->removeTrailingSlash = function ( Request $req, RequestHandler $handler  ) {
 	$uri = $req->getUri( );
 	$path = $uri->getPath( );
 	
@@ -25,6 +25,4 @@ $GLOBALS['app']->router->add(  function (  Request $req, RequestHandler $handler
 	}
 
 	return $handler->handle( $req );
-} );
-
-?>
+};
