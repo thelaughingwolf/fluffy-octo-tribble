@@ -1,8 +1,6 @@
 <?php
 
 spl_autoload_register( function( $class ) {
-	error_log( "Are we responsible for autoloading $class?" );
-
 	// project-specific namespace prefix
 	$prefix = 'LaughingWolf\\API';
 
@@ -13,7 +11,6 @@ spl_autoload_register( function( $class ) {
 	$len = strlen( $prefix );
 	if ( strncmp( $prefix, $class, $len ) !== 0 ) {
 		// no, move to the next registered autoloader
-		error_log( "This class is not a LaughingWolf\API class!" );
 		return;
 	}
 
@@ -24,8 +21,6 @@ spl_autoload_register( function( $class ) {
 	// separators with directory separators in the relative class name, append
 	// with .php
 	$file = $base_dir . str_replace( '\\', '/', $relative_class ) . '.php';
-
-	error_log( "Will attempt to load this class: " . $file );
 
 	// if the file exists, require it
 	if ( is_readable( $file ) ) {
