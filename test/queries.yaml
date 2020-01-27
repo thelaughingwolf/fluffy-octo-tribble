@@ -1,0 +1,53 @@
+# Queries to test
+---
+# Test a basic query with all fields
+- skip: 15
+  limit: 5
+  sort: username DESC
+  filters:
+    email: balrogthane@gmail.com
+# Test array filters
+- filters:
+    id:
+      - 1
+      - 2
+      - 3
+    username:
+      "!":
+        - balrogthane
+        - eiramlehcar
+# Test multi-property filters
+- filters:
+    createdAt:
+      ">": "2019-01-01 00:00:00"
+      "<": "2019-12-31 23:59:59"
+    updatedAt:
+      ">": "2018-01-01 00:00:00"
+      "<": "2020-12-31 23:59:59"
+# Test OR filters
+- filters:
+    or:
+      - username: balrogthane@gmail.com
+        name: Michael Bennett
+      - email: balrogthane@gmail.com
+        name: Rachel Bennett
+# Test AND filters
+- filters:
+    and:
+      - or:
+          - username: balrogthane@gmail.com
+          - email: balrogthane@gmail.com
+      - or:
+          - username: eiramlehcar@gmail.com
+          - email: eiramlehcar@gmail.com
+# Test contains, startsWith, endsWith, like, and all their negations
+- filters:
+    username:
+      startsWith: balro
+      contains: gmail
+      endsWith: .com
+      like: b%m
+      "!startsWith": eiram
+      "!endsWith": .net
+      "!contains": rachel
+      "!like": %disney%

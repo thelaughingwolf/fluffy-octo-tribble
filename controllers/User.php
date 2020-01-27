@@ -11,6 +11,4 @@ $GLOBALS['app']->router->get( '/users', function ( Request $req, Response $res, 
 	];
 	$res->getBody( )->write( json_encode( $result ) );
 	return $res;
-})->add($returnJson);
-
-?>
+})->add( $GLOBALS['app']->middleware->returnJson );

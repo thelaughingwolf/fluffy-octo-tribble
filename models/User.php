@@ -2,11 +2,11 @@
 
 use LaughingWolf\API\Model as Model;
 
-class users extends Model {
+class User extends Model {
 	public function __construct( $dbconn ) {
 		$fields = (object) [
-			'user_id'		=>	(object) [
-				'type'		=>	'CHAR(32)'
+			'id'			=>	(object) [
+				'type'		=>	'INT(10)'
 			],
 			'username'		=>	(object) [
 				'type'		=>	'VARCHAR(255)',
@@ -23,8 +23,8 @@ class users extends Model {
 				'type'		=>	'VARCHAR(255)',
 				'sortable'	=>	true
 			],
-			'status_id'		=>	(object) [
-				'type'		=>	'INT(10)',
+			'status'		=>	(object) [
+				'type'		=>	"ENUM('enabled','disabled')",
 				'sortable'	=>	true
 			],
 			'created'		=>	(object) [
@@ -36,20 +36,21 @@ class users extends Model {
 				'sortable'	=>	'DESC'
 			],
 			'created_by_id'	=>	(object) [
-				'type'		=>	'CHAR(32)'
+				'type'		=>	'INT(10)'
 			],
 			'updated_by_id'	=>	(object) [
-				'type'		=>	'CHAR(32)'
+				'type'		=>	'INT(10)'
 			]
 		];
 
 		$associations = (object) [
-			'status'	=>	(object) [
+			'createdBy'	=>	(object) [
 				'type'			=>	'hasOne',
+				'model'			=>	'User',
 				'schema'		=>	'badwolf_master',
 				'table'			=>	'statuses',
-				'key'			=>	'status_id',
-				'foreignKey'	=>	'status_id'
+				'key'			=>	'created_by_id',
+				'foreignKey'	=>	'id'
 			]
 		];
 
