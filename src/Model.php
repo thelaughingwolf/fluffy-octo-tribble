@@ -8,7 +8,7 @@ class ModelException extends \Exception {
 	private $stage;
 
 	public function __construct( $message, $stage, $code = 0, Exception $previous = null ) {
-		$allowedStages = [ 'lifting', 'operating' ];
+		$allowedStages = [ 'config', 'operation' ];
 		if ( in_array( $stage, $allowedStages ) ) {
 			$this->stage = $stage;
 		}
@@ -17,6 +17,19 @@ class ModelException extends \Exception {
 
 	public function __toString( ) {
 		return __CLASS__ . ": [{$this->code}]: " . ( isset( $this->stage ) ? $this->stage . " | " : "" ) . $this->message;
+	}
+}
+
+class QueryException extends \Exception {
+	private $path;
+
+	public function __construct( $message, $path, $code = 0, Exception $previous = null ) {
+		$this->path = $path;
+		parent::__construct( $message, $code, $previous );
+	}
+
+	public function __toString( ) {
+		return __CLASS__ . ": [{$this->code}]: " . ( isset( $this->path ) ? $this->path . " | " : "" ) . $this->message;
 	}
 }
 
@@ -70,11 +83,11 @@ class Model {
 	// Instantiation methods
 	private function processFields( $input ) {
 		if ( !isset( $input ) ) {
-			throw new ModelException( "Model must have fields defined", 'lifting' );
+			throw new ModelException( "Model must have fields defined", 'config' );
 		}
 
 		if ( !is_object( $input ) ) {
-			throw new ModelException( "Fields definition must be an object", 'lifting' );
+			throw new ModelException( "Fields definition must be an object", 'config' );
 		}
 
 		foreach ( $input as $fieldName => $opts ) {
@@ -92,7 +105,7 @@ class Model {
 					$opts->length = $length;
 				}
 			} else {
-				throw new ModelException( "Every field definition must have a type", 'lifting' );
+				throw new ModelException( "Every field definition must have a type", 'config' );
 			}
 
 			if ( isset( $opts->sortable ) ) {
@@ -119,28 +132,28 @@ class Model {
 			return (object) [ ];
 		}
 		if ( !is_object( $input ) ) {
-			throw new ModelException( "Associations definition must be an object", 'lifting' );
+			throw new ModelException( "Associations definition must be an object", 'config' );
 		}
 
 		$allowedAssociationTypes = [ 'hasOne', 'hasMany', 'manyToMany' ];
 
 		foreach ( $input as $fieldName => $opts ) {
 			if ( !is_object( $opts ) ) {
-				throw new ModelException( "Associations definitions must be objects", 'lifting' );
+				throw new ModelException( "Associations definitions must be objects", 'config' );
 			}
 			if ( !isset( $opts->type ) ) {
-				throw new ModelException( "Every association definition must have a type", 'lifting' );
+				throw new ModelException( "Every association definition must have a type", 'config' );
 			} else if ( !in_array($opts->type, $allowedAssociationTypes ) ) {
-				throw new ModelException( "Association type '{$opts->type}' is not recognized", 'lifting' );
+				throw new ModelException( "Association type '{$opts->type}' is not recognized", 'config' );
 			}
 			if ( !isset( $opts->key ) ) {
-				throw new ModelException( "Every association definition must have a key", 'lifting' );
+				throw new ModelException( "Every association definition must have a key", 'config' );
 			}
 			if ( !isset( $opts->schema ) ) {
-				throw new ModelException( "Every association definition must have a schema", 'lifting' );
+				throw new ModelException( "Every association definition must have a schema", 'config' );
 			}
 			if ( !isset( $opts->table ) ) {
-				throw new ModelException( "Every association definition must have a table", 'lifting' );
+				throw new ModelException( "Every association definition must have a table", 'config' );
 			}
 
 			if ( !isset( $opts->foreignKey ) ) {
@@ -153,43 +166,61 @@ class Model {
 
 	// Utility methods
 	public function parseQuery( $query ) {
+		error_log( "Parsing query: " . json_encode( $query ) );
 		$result = (object) [
 			'sqlPieces'	=>	[ ],
 			'sql'		=>	'',
 			'values'	=>	[ ],
 			'filters'	=>	(object) [ ],
 			'sort'		=>	null,
-			'limit'		=>	50,
-			'skip'		=>	0
+			'skip'		=>	0,
+			'limit'		=>	50
 		];
 
 		if ( isset( $query->filters ) ) {
-			$result->filters = $this->parseFilters( $query->filters );
-			$result->sql = ' WHERE ' . $result->filters->sql . ' ';
-			$result->values = array_merge( $result->values, $result->filters->values );
+			try {
+				$result->filters = $this->parseFilters( $query->filters );
+				$result->sqlPieces[] = 'WHERE ' . $result->filters->sql;
+				$result->values = array_merge( $result->values, $result->filters->values );
+			} catch ( Exception $e ) {
+				throw new QueryException( $e->message, "filters" );
+			}
 		}
 
 		if ( isset( $query->sort ) ) {
-			$result->sort = $this->parseSort( $query->sort );
-			$result->sql .= ' ORDER BY ' . $result->sort->sql;
-			// No values for ORDER BY - PDO can't handle it
-		}
-
-		if ( isset( $query->limit ) ) {
-			$result->limit = $this->parseLimit( $query->limit );
+			try {
+				$result->sort = $this->parseSort( $query->sort );
+				$result->sql .= ' ORDER BY ' . $result->sort->sql;
+				$result->sqlPieces[] = 'ORDER BY ' . $result->sort->sql;
+				// No values for ORDER BY - PDO can't handle it
+			} catch ( Exception $e ) {
+				throw new QueryException( $e->message, "sort" );
+			}
 		}
 		
 		if ( isset( $query->skip ) ) {
-			$result->skip = $this->parseSkip( $query->skip );
+			try {
+				$result->skip = $this->parseSkip( $query->skip );
+			} catch ( Exception $e ) {
+				throw new QueryException( $e->message, "skip" );
+			}
 		}
 
-		// Limit and skip are always set
-		$result->sql .= ' LIMIT ?, ?';
-		$result->values[] = $result->limit;
-		$result->values[] = $result->skip;
+		if ( isset( $query->limit ) ) {
+			try {
+				$result->limit = $this->parseLimit( $query->limit );
+			} catch ( Exception $e ) {
+				throw new QueryException( $e->message, "limit" );
+			}
+		}
 
-		
-		
+		// Skip and limit are always set
+		$result->sqlPieces[] = 'LIMIT ?, ?';
+		$result->values[] = $result->skip;
+		$result->values[] = $result->limit;
+
+		$result->sql = implode( ' ', $result->sqlPieces );
+
 		return $result;
 	}
 	
@@ -251,7 +282,7 @@ class Model {
 
 	// Accepts Waterline query language, because I like it
 	// Returns a WHERE block for PDO->prepare( )
-	protected function parseFilters( $filters, $depth = 0, $mode = 'AND' ) {
+	protected function parseFilters( $filters, $depth = 0, $mode = 'AND', $parentMode = null ) {
 		$result = (object) [
 			'sqlPieces'	=>	[ ],
 			'sql'		=>	'',
@@ -261,42 +292,124 @@ class Model {
 
 		if ( is_array( $filters ) ) {
 			foreach ( $filters as $clause ) {
-				$clause = $this->parseFilters( $clause, ( $depth + 1 ), $mode );
+				$clause = $this->parseFilters( $clause, ( $depth + 1 ), $mode, $mode );
 				$result->sqlPieces[] = $clause->sql;
 				$result->values = array_merge( $result->values, $clause->values );
 			}
 		} else {
+			$mode = 'AND'; // Objects inside of ORs are always ANDs
 			foreach ( $filters as $key => $value ) {
-				if ( strtoupper( $key ) === $mode ) {
-					throw new ModelException( "Cannot include a $key clause inside a $key clause", 'operating' );
-				} else if ( strtoupper( $key ) === 'OR' || strtoupper( $key ) === 'AND' ) {
+				if ( strtoupper( $key ) === 'OR' || strtoupper( $key ) === 'AND' ) {
 					if ( !is_array( $value ) ) {
-						throw new ModelException( strtoupper( $key ) . " subordinate clauses must be represented by an array", "operating" );
+						throw new ModelException( strtoupper( $key ) . " subordinate clauses must be represented by an array", "operation" );
 					}
-					$clause = $this->parseFilters( $value, ( $depth + 1 ), strtoupper( $key ) );
-					$result->sqlPieces[] = "({$clause->sql})";
+					$clause = $this->parseFilters( $value, ( $depth + 1 ), strtoupper( $key ), $mode );
+					$result->sqlPieces[] = "{$clause->sql}";
 					$result->values = array_merge( $result->values, $clause->values );
 				} else {
-					$phrase = $this->parseFilterValue( $value );
-					$result->sqlPieces[] = "$key " . $phrase->sql;
-					$result->values = array_merge( $result->values, ( is_array( $phrase->value ) ? $phrase->value : [ $phrase->value ] ) );
+					$phrase = $this->parseFilterField( $value );
+					foreach ( $phrase->clauses as $clause ) {
+						$result->sqlPieces[] = "$key " . $clause->sql;
+						$result->values = array_merge( $result->values, ( is_array( $clause->value ) ? $clause->value : [ $clause->value ] ) );
+					}
 				}
 			}
 		}
 
 		$result->sql = implode(" $mode ", $result->sqlPieces );
 
+		if ( isset( $parentMode ) && $parentMode !== $mode) {
+			$result->sql = "({$result->sql})";
+		}
+
 		return $result;
 	}
 
-	protected function parseFilterValue( $value ) {
+	protected function parseFilterField( $fieldValue ) {
 		$result = (object) [
-			'operand'	=>	'=',
-			'sql'		=>	'',
-			'value'		=>	null
+			'clauses'	=>	[ ]
 		];
 
-		if ( isset( $value ) ) {
+		if ( !is_object( $fieldValue ) ) {
+			$fieldValue = (object) [
+				'='	=>	$fieldValue
+			];
+		}
+
+		foreach ( $fieldValue as $key => $value ) {
+			$result->clauses[] = $this->parseFilterValue( $key, $value );
+		}
+
+		return $result;
+	}
+
+	protected function parseFilterValue( $operand, $value ) {
+		$result = (object) [
+			'sql'		=>	'',
+			'operand'	=>	$operand,
+			'value'		=>	$value
+		];
+
+		switch ( strtolower( $result->operand ) ) {
+			case '=':
+			case '<':
+			case '<=':
+			case '>':
+			case '>=':
+			case '!=':
+				// No actions taken - these will translate directly
+				break;
+			case '!':
+				$result->operand = '!=';
+				break;
+			case 'contains':
+				$result->operand = 'LIKE';
+				$result->value = "%" . $result->value . "%";
+				break;
+			case 'startswith':
+				$result->operand = 'LIKE';
+				$result->value = $result->value . "%";
+				break;
+			case 'endswith':
+				$result->operand = 'LIKE';
+				$result->value = "%" . $result->value;
+				break;
+			case 'like':
+				$result->operand = 'LIKE';
+				$result->value = $result->value;
+				break;
+			case '!contains':
+				$result->operand = 'NOT LIKE';
+				$result->value = "%" . $result->value . "%";
+				break;
+			case '!startswith':
+				$result->operand = 'NOT LIKE';
+				$result->value = $result->value . "%";
+				break;
+			case '!endswith':
+				$result->operand = 'NOT LIKE';
+				$result->value = "%" . $result->value;
+				break;
+			case '!like':
+				$result->operand = 'NOT LIKE';
+				$result->value = $result->value;
+				break;
+		}
+
+		if ( is_array( $result->value ) ) {
+			if ( $result->operand === '=' ) {
+				$result->operand = 'IN';
+			} else if ($result->operand === '!=') {
+				$result->operand = 'NOT IN';
+			} else {
+				throw new ModelException( "Array as value for operand {$result->operand} is not supported", 'operation' );
+			}
+			$result->sql = "{$result->operand} (" . implode( ", ", array_fill( 0, count( $result->value ), "?" ) ) . ")";
+		} else {
+			$result->sql = "{$result->operand} ?";
+		}
+
+		/* if ( isset( $value ) ) {
 			if ( is_object( $value ) ) {
 				if ( Helpers::hasProperty( $value, '<' ) ) { // Key less than value
 					$result->operand = '<';
@@ -349,12 +462,12 @@ class Model {
 			} else if ($result->operand === '!') {
 				$result->operand = 'NOT IN';
 			} else {
-				throw new ModelException( "Array as value for operand {$result->operand} is not supported", 'operating' );
+				throw new ModelException( "Array as value for operand {$result->operand} is not supported", 'operation' );
 			}
 			$result->sql = "{$result->operand} (" . implode( ", ", array_fill( 0, count( $result->value ), "?" ) ) . ")";
 		} else {
 			$result->sql = "{$result->operand} ?";
-		}
+		} */
 
 		return $result;
 	}
